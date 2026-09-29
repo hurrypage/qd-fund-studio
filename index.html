@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fbfbfa">
+  <meta name="description" content="QD 基金观察台：查看跨境基金估值、申购额度、ETF 行情和自选基金。">
+  <title>QD 观察台 · 基金估值与额度</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./redesign.css">
+</head>
+<body>
+  <div class="app-shell">
+    <nav class="side-nav" aria-label="主导航">
+      <div class="brand"><span class="brand-mark">QD</span><span class="brand-name">QD 观察台<small>跨境基金工作台</small></span></div>
+      <div class="nav-caption">工作空间</div>
+      <button class="ni on" data-v="home" title="基金总览" onclick="setView('home')"><span class="nav-symbol">▦</span><span>基金总览</span></button>
+      <button class="ni" data-v="etf" title="场内 ETF" onclick="setView('etf')"><span class="nav-symbol">▤</span><span>场内 ETF</span></button>
+      <button class="ni" data-v="mkt" title="全球行情" onclick="setView('mkt')"><span class="nav-symbol">◎</span><span>全球行情</span></button>
+      <button class="ni" data-v="mine" title="关于与设置" onclick="setView('mine')"><span class="nav-symbol">⚙</span><span>关于与设置</span></button>
+      <div class="side-note"><span class="side-note-label">数据说明</span><p>估值由公开持仓与市场行情计算，仅供观察，不构成投资建议。</p></div>
+    </nav>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumb">市场工具 <span>/</span> <strong id="sectionCrumb">基金总览</strong></div>
+        <div class="top-status"><span class="live-indicator"></span><span class="status" id="status">数据加载中</span><span class="status-divider"></span><span class="upd" id="upd">正在更新行情</span></div>
+      </header>
+
+      <div class="content-wrap">
+        <section class="page-intro">
+          <div><p class="eyebrow">QD / FUND OVERVIEW</p><h1 id="pageTitle">每一个数字，都有来处。</h1><p class="intro-copy" id="pageDescription">净值、估值与累计表现，放在一张清晰的画布上。</p></div>
+          <div class="intro-date" id="dateLabel"></div>
+        </section>
+
+        <div id="view-home">
+          <section class="overview-summary" aria-label="基金概览">
+            <div class="summary-metric"><span>观察基金</span><strong id="metricFunds">--</strong><small>当前列表</small></div>
+            <div class="summary-metric"><span>可申购</span><strong id="metricBuyable">--</strong><small>按当前申购状态</small></div>
+            <div class="summary-metric"><span id="metricLeaderLabel">年内表现统计中</span><strong class="summary-accent" id="metricLeader">--</strong><small id="metricLeaderName">等待净值数据</small></div>
+            <div class="summary-metric"><span>重点基金净值日期</span><strong id="metricNavDate">--</strong><small>以基金公司披露为准</small></div>
+          </section>
+
+          <div class="overview-grid">
+            <section class="focus-panel" aria-label="重点基金走势">
+              <div class="focus-head"><div><span class="focus-eyebrow">01 / 重点观察</span><h2 id="focusName">正在加载基金…</h2><p id="focusMeta">历史净值加载中</p></div><div class="focus-performance"><span>今年以来</span><strong id="focusYtd">--</strong></div></div>
+              <div id="focusChart" class="focus-chart"><div class="hm-empty">正在加载基金与沪深300的同期走势…</div></div>
+              <div class="focus-ranges" id="focusRanges" role="group" aria-label="重点基金走势图时间范围"></div>
+            </section>
+            <section class="watch-panel" aria-label="观察清单"><div class="watch-heading"><h2>观察清单</h2><span id="watchCount">/ 0</span></div><div id="watchList"></div></section>
+          </div>
+
+          <section class="fund-section">
+            <div class="section-heading funds-heading"><div><span class="section-kicker">基金观察</span><h2>基金列表 <span class="heading-count" id="fundCount"></span></h2></div><span class="section-aside">点击基金查看持仓与历史表现</span></div>
+            <div class="controls">
+              <div class="filter-row" role="group" aria-label="基金筛选">
+                <button class="chk on" id="ckAll" onclick="toggleFilter('all')"><i></i>全部</button>
+                <button class="chk" id="ckBuy" onclick="toggleFilter('buy')"><i></i>可申购</button>
+                <button class="chk" id="ckFav" onclick="toggleFilter('fav')"><i></i>自选</button>
+                <button class="chk" id="ckIdx" onclick="toggleFilter('idx')"><i></i>指数基金</button>
+                <button class="chk" id="ckAct" onclick="toggleFilter('act')"><i></i>主动基金</button>
+              </div>
+              <div class="control-bottom"><div class="search-box"><label class="sr-only" for="kw">搜索基金名称或代码</label><span class="search-glyph">⌕</span><input class="search-input" id="kw" type="search" placeholder="搜索列表或添加基金" autocomplete="off"><div class="results" id="results" style="display:none"></div></div><button class="sort-btn" id="sortBtn" onclick="cycleSort()">排序 · 默认</button></div>
+            </div>
+            <div class="list-head"><span>基金 / 申购状态</span><span>实时估值 / 年内表现</span></div>
+            <div id="list" class="fund-list"><div class="loading-row"></div><div class="loading-row"></div><div class="loading-row"></div></div>
+            <div class="empty" id="empty" style="display:none">当前筛选下没有基金。试试切换筛选条件，或使用上方搜索添加基金。</div>
+          </section>
+          <section class="market-overview" aria-label="主要市场指数">
+            <div class="section-heading"><div><span class="section-kicker">市场脉搏</span><h2>主要指数</h2></div><span class="section-aside">行情随市场时段更新</span></div>
+            <div class="idx-strip" id="idxStrip"><div class="index-skeleton"></div><div class="index-skeleton"></div><div class="index-skeleton"></div></div>
+          </section>
+          <details class="method-note"><summary>估值与数据口径</summary><div class="tips">收盘估值结合昨夜美股收盘与今日 A 股、港股行情；实时估值合并美股盘前、盘中及盘后最新行情。基金持仓按公开报告披露，可能滞后于实际调仓。限购信息来自天天基金公开资料及申购公告，购买前请以基金公司公告为准。估值仅供参考，不构成投资建议。</div></details>
+        </div>
+
+        <div id="view-etf" style="display:none"><div class="section-heading"><div><span class="section-kicker">场内交易</span><h2>跨境 ETF</h2></div><span class="section-aside">按场内涨跌幅排序</span></div><div class="data-panel" id="etf"></div><p class="table-note">溢价率 =（场内市价 − 基金净值）/ 净值；净值以最近披露日为准。高溢价可能带来回落风险。</p></div>
+        <div id="view-mkt" style="display:none"><div class="section-heading"><div><span class="section-kicker">全球视野</span><h2>市场行情</h2></div><span class="section-aside">A 股、港股、美股及主要海外指数</span></div><div class="data-panel market-panel" id="mkt"></div></div>
+        <div id="view-mine" style="display:none"><div class="section-heading"><div><span class="section-kicker">使用说明</span><h2>关于观察台</h2></div></div><div class="data-panel mine-card" id="mineCard"></div></div>
+
+        <footer class="footer">公开市场数据可能延迟。所有估值仅供参考，不构成投资建议。</footer>
+      </div>
+    </main>
+  </div>
+  <script src="./app.js"></script>
+  <script src="./ui.js"></script>
+</body>
+</html>
