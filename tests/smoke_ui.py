@@ -17,6 +17,12 @@ with sync_playwright() as playwright:
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(URL, wait_until="domcontentloaded")
+    page.wait_for_function("document.querySelector('.card[data-code=\"019736\"] .f-sub')?.textContent.includes('A限购10元')", timeout=60000)
+    assert "C限购10元" in page.locator('.card[data-code="019736"] .f-sub').inner_text()
+    assert "公告 2026-09-24" in page.locator('.card[data-code="019736"] .f-sub').inner_text()
+    assert "A限购1万元" in page.locator('.card[data-code="100055"] .f-sub').inner_text()
+    assert "C限购5元" in page.locator('.card[data-code="040046"] .f-sub').inner_text()
+    assert "待核验" in page.locator('.card[data-code="006373"] .f-sub').inner_text()
     page.locator("#focusChart .cmp-fund-line").wait_for(timeout=60000)
     assert page.locator("#focusChart .cmp-index-line").count() == 1
     if page.locator("#metricLeaderLabel").inner_text() == "已统计基金最高":

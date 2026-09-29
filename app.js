@@ -820,11 +820,16 @@ function jsonp(url, cbParam) {
   return new Promise(function(resolve, reject) {
     var cb='jp'+Math.random().toString(36).slice(2);
     var s=document.createElement('script');
-    window[cb]=function(d){ resolve(d); cleanup(); };
-    s.onerror=function(){ reject(new Error('jsonp')); cleanup(); };
+    var done=false, timer=setTimeout(function(){ finish(new Error('数据请求超时')); },12000);
+    function finish(err, data){
+      if(done) return;
+      done=true; clearTimeout(timer); delete window[cb]; s.remove();
+      if(err) reject(err); else resolve(data);
+    }
+    window[cb]=function(d){ finish(null,d); };
+    s.onerror=function(){ finish(new Error('数据请求失败')); };
     s.src=url+(url.indexOf('?')>-1?'&':'?')+(cbParam||'callback')+'='+cb;
     document.head.appendChild(s);
-    function cleanup(){ delete window[cb]; s.remove(); }
   });
 }
 function fetchNav(fcode) {
@@ -1055,7 +1060,8 @@ function fetchLimit(fcode) {
   return fetch('https://fundmobapi.eastmoney.com/FundMNewApi/FundMNBasicInformation?FCODE='+fcode+'&deviceid=Wap&plat=Wap&product=EFund&version=6.5.5')
     .then(function(r){ return r.json(); })
     .then(function(d){
-      var b = d.Datas || {};
+      if(!d || d.Success===false || !d.Datas) throw new Error('申购接口暂无有效数据');
+      var b = d.Datas;
       var state = b.SGZT || '', max = parseFloat(b.MAXSG) || 0;
       var buy = b.BUY !== false; /* false=渠道未售（直销/汇款专供），限额以份额专属公告为准 */
       if (max >= 1e8) max = 0; /* MAXSG 的 1e11 为"不限"哨兵值 */
@@ -1068,7 +1074,10 @@ function fetchLimit(fcode) {
 }
 /* 同基金全部人民币份额 -> 逐份额限额 */
 function fetchClassLimits(fcode) {
-  return searchFunds(fcode).then(function(list){
+  var known=funds.filter(function(f){ return f.code===fcode; })[0];
+  var cached=known&&known.limitClasses&&known.limitClasses.length
+    ? known.limitClasses.map(function(c){ return {code:c.code,cls:c.cls||'A',directOnly:!!c.directOnly}; }) : null;
+  var discovered=cached ? Promise.resolve(cached) : searchFunds(fcode).then(function(list){
     var self = list.filter(function(x){ return x.code===fcode; })[0];
     if (!self) return null;
     var baseKey = shareClassKey(self.name).key;
@@ -1077,27 +1086,29 @@ function fetchClassLimits(fcode) {
         .map(function(x){ return { code:x.code, cls:shareClassKey(x.name).cls||'A' }; })
         .filter(function(x){ if(seen[x.cls]) return false; seen[x.cls]=1; return true; })
         .sort(function(a,b){ return a.cls<b.cls?-1:1; });
-      var chain=Promise.resolve();
-      classes.forEach(function(c){
-        chain=chain.then(function(){
-          return fetchLimit(c.code).then(function(r){
-            if (r && r.buy === false) { /* 渠道未售（直销/汇款专供）：保留内置公告值 */
-              c.unknown = true;
-              var st = r.state || '';
-              if (st.indexOf('暂停') === -1 && st.indexOf('封闭') === -1 && st.indexOf('认购') === -1) c.directOnly = true;
-              return;
-            }
-            var l = r ? r.limit : null;
-            c.state=l?l.state:''; c.max=l?l.max:0;
-          }).catch(function(){ c.state=''; c.max=0; });
-        }).then(function(){ return new Promise(function(r){ setTimeout(r, 500); }); });
-      });
-      return chain.then(function(){ return classes; });
+      return classes;
     });
+  });
+  return discovered.then(function(classes){
+      if (!classes) return null;
+      return Promise.all(classes.map(function(c){
+        return fetchLimit(c.code).then(function(r){
+          if (r && r.buy === false) {
+            c.unknown=true;
+            var st=r.state||'';
+            if (!/暂停|封闭|认购/.test(st)) c.directOnly=true;
+            return c;
+          }
+          var l=r?r.limit:null;
+          c.state=l?l.state:''; c.max=l?l.max:0;
+          return c;
+        }).catch(function(){ c.unknown=true; return c; });
+      }));
   });
 }
 /* 单份额描述：'A限购100元' / 'A暂停申购' / 'A不限购' */
 function classLimitText(c) {
+  if (c.unknown) return c.cls+'限额待核验';
   var s = c.directOnly ? '(直销)' : '';
   if ((c.state||'').indexOf('暂停') > -1) return c.cls+'暂停申购';
   if ((c.state||'').indexOf('封闭期') > -1) return c.cls+'封闭期';
@@ -1111,6 +1122,7 @@ function limitTag(f) {
   var cs = f.limitClasses;
   if (cs && cs.length) {
     var a = aClassOf(cs);
+    if (a.unknown || f.limitNoticePending) return '限额待核验';
     if ((a.state||'').indexOf('暂停') > -1) return '暂停申购';
     if (!(a.max > 0)) return '';
     if (f.scope === '各份额合并计算') {
@@ -1134,17 +1146,18 @@ function scopeText(f) {
 /* 限额主体：分开 -> "A限购100元，C限购100元"；合并 -> "A/C/E限购100元" */
 function limitBody(f) {
   var cs = f.limitClasses;
+  if (f.limitNoticePending) return '最新公告限额待核验';
   if (!cs || !cs.length) {
     if (!f.limit) return '';
     if (f.limit.stop) return '暂停申购';
     return '单日限' + fmtAmt(f.limit.max);
   }
-  var allPaused = cs.every(function(c){ return (c.state||'').indexOf('暂停') > -1; });
+  var allPaused = cs.every(function(c){ return !c.unknown && (c.state||'').indexOf('暂停') > -1; });
   if (allPaused) return '暂停申购(全份额)';
   if (f.scope === '各份额合并计算') {
     var groups = {}, order = [];
     cs.forEach(function(c){
-      var t = (c.state||'').indexOf('暂停') > -1 ? '暂停申购' : (c.max > 0 ? '限购'+fmtAmt(c.max) : '不限购');
+      var t = c.unknown ? '限额待核验' : ((c.state||'').indexOf('暂停') > -1 ? '暂停申购' : (c.max > 0 ? '限购'+fmtAmt(c.max) : '不限购'));
       var key = t + (c.directOnly ? '|直销' : ''); /* 直销专供份额独立成组 */
       if (!groups[key]) { groups[key]=[]; order.push(key); }
       groups[key].push(c.cls);
@@ -1159,6 +1172,7 @@ function directText(f) {
   if (!d || !(d.max > 0)) return '';
   var cs = f.limitClasses;
   var a = (cs && cs.length) ? (cs.filter(function(x){ return x.code === f.code; })[0] || aClassOf(cs)) : null;
+  if (a && a.unknown) return '';
   var s = a ? (a.state || '') : '';
   var agencyPaused = s.indexOf('暂停') > -1 || s.indexOf('封闭期') > -1 || s.indexOf('认购期') > -1;
   var amax = (a && a.max > 0) ? a.max : 0;
@@ -1174,6 +1188,9 @@ function limitMetaHtml(f) {
   if (body) s += '<span class="'+(limitStop(f)?'stop-plain':'')+'">'+body+'</span>';
   if (scope) s += '<span class="scope-wrap">(<span class="'+(scope==='合并计算'?'scope-merge':'scope-split')+'">'+scope+'</span>)</span>';
   if (direct) s += '<span class="direct-tag"> · '+direct+'</span>';
+  if (f.limitSource==='notice' && f.limitUrl) s += '<a class="limit-source" href="'+f.limitUrl+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">公告 '+f.limitDate+'</a>';
+  else if (f.limitNoticePending && f.limitUrl) s += '<a class="limit-source pending" href="'+f.limitUrl+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">待核验公告 '+f.limitDate+'</a>';
+  else if (f.limitSource==='api') s += '<span class="limit-source">接口核对 '+(f.limitDate||'')+'</span>';
   return s;
 }
 /* 从公告正文判断份额口径（与小程序云函数同一套规则） */
@@ -1263,35 +1280,43 @@ function closeLimitModal(){
 
 /* 刷新缺失或过期的限购信息（24小时缓存），串行+间隔避免限流 */
 function refreshLimits() {
-  var queue = funds.filter(function(f){ return !f.limitTs || (Date.now()-f.limitTs) > 86400000; });
+  var queue = funds.filter(function(f){ return !f.limitTs || (Date.now()-f.limitTs) > 21600000; });
+  queue.sort(function(a,b){ return Number(!!b.fav)-Number(!!a.fav); });
   var changedLimits = [];
   var chain = Promise.resolve();
   queue.forEach(function(f){
     chain = chain.then(function(){
       return fetchClassLimits(f.code).then(function(classes){
-        f.limitTs = Date.now();
         if (classes) {
           /* 渠道未售份额（unknown）保留内置（份额公告解析）值 */
           classes = classes.map(function(c){
             if (!c.unknown) return c;
             var old = (f.limitClasses||[]).filter(function(x){ return x.code===c.code; })[0];
-            if (old) { if (c.directOnly) old.directOnly = true; return old; }
-            return { code:c.code, cls:c.cls, state:'', max:0, directOnly:!!c.directOnly };
+            if (old) { if (c.directOnly) old.directOnly = true; old.unknown=true; return old; }
+            return { code:c.code, cls:c.cls, state:'', max:0, directOnly:!!c.directOnly, unknown:true };
           });
+          classes.forEach(function(c){ if (!c.unknown) c.source='api'; });
           /* 限额变动检测：与上次快照比对（首次获取只记快照不提醒），变动则记录并弹窗，点击卡片后消除 */
           var oldSig = f._limitSig || '';
           f.limitClasses = classes;
+          var hasApi=classes.some(function(c){ return !c.unknown; });
+          f.limitTs = hasApi ? Date.now() : 0;
+          f.limitSource = hasApi ? 'api' : '';
+          f.limitDate = hasApi ? new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Shanghai'}) : '';
+          applyLimitNotice(f);
           var newSig = limitSig(f);
           if (oldSig && oldSig !== newSig) {
             f.limitAlert = { ts: Date.now(), text: limitChangeText(f, oldSig, newSig) };
             changedLimits.push(f);
           }
           f._limitSig = newSig;
+          saveFunds();
+          if (curView==='home') renderHome();
         }
         /* 公告口径实时解析（浏览器受Referer限制通常不可用，失败回退内置口径） */
         var limited = (classes||[]).some(function(c){ return (c.state||'').indexOf('暂停')>-1 || c.max>0; });
         /* 内置基金口径以数据表（共同限额基金列）为准，不再用公告解析覆盖 */
-        if (limited && f.scopeSrc !== 'table') {
+        if (limited && f.scopeSrc !== 'table' && f.scopeSrc !== 'notice') {
           return fetchScope(f.code).then(function(si){
             if (si && si.scope) { f.scope = si.scope; f.scopeDate = si.date; }
             else {
@@ -1311,11 +1336,40 @@ function refreshLimits() {
   });
 }
 
+var limitNotices={limits:{},unverified:{}};
+function applyLimitNotice(f){
+  var verified=limitNotices.limits[f.code];
+  var pending=limitNotices.unverified[f.code];
+  f.limitNoticePending=!!pending;
+  if (pending) { f.limitUrl=pending.url||''; f.limitDate=pending.date||''; }
+  if (!verified || (verified.effectiveDate && verified.effectiveDate>new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Shanghai'}))) return;
+  var covered=verified.classes||[];
+  (f.limitClasses||[]).forEach(function(c){
+    if (covered.indexOf(c.code)<0) return;
+    c.max=verified.amount; c.state='限大额'; c.unknown=false; c.source='notice';
+  });
+  f.limitSource='notice'; f.limitUrl=verified.url||''; f.limitDate=verified.date||'';
+  if (verified.scope) { f.scope=verified.scope; f.scopeDate=verified.date||''; f.scopeSrc='notice'; }
+  f.limitNoticePending=false;
+}
+function loadLimitNotices(){
+  return fetch('./limits.json?b='+Math.floor(Date.now()/3600000),{cache:'no-store'}).then(function(r){
+    if(!r.ok) throw new Error('公告快照不可用');
+    return r.json();
+  }).then(function(d){
+    if(!d || !d.limits || !d.unverified) throw new Error('公告快照格式错误');
+    limitNotices=d;
+    funds.forEach(applyLimitNotice);
+    saveFunds(); render();
+  }).catch(function(){ /* 快照暂不可用时，未核实的预置数据仍标为待核验。 */ });
+}
+
 /* ================= 主流程 ================= */
 function saveFunds(){ lsSet(LS_FUNDS, funds); }
 
 function refresh() {
   document.getElementById('status').textContent = statusText();
+  loadLimitNotices();
   var need = funds.filter(function(f){ return !f.holdings && f.src!=='none'; });
   var p = need.length
     ? Promise.all(need.map(function(f){
@@ -1356,7 +1410,7 @@ function refresh() {
       }).catch(function(){});
     })).then(saveFunds);
   }).then(function(){
-    refreshLimits().then(render);  /* 限购信息后台补刷，不阻塞行情 */
+    refreshLimits().then(render);
     refreshYtd();                /* 今年以来涨幅后台补刷，不阻塞行情 */
     var set={};
     funds.forEach(function(f){ (f.holdings||[]).forEach(function(h){ var qc=quoteCodeOf(h); if(qc) set[qc]=1; }); });
@@ -2028,7 +2082,7 @@ function seedFromDefaults(){
   return FUNDS_DEFAULT.map(function(f){ return { code:f.code, name:f.name, ftype:f.ftype, coef:f.coef||0.90, ah:f.ah||idxAhOf(f), scope:f.scope||null,
     scopeDate:f.scopeDate||'', scopeSrc:f.scopeSrc||'', direct:f.direct||null, idxName:f.idxName||'', src:f.src||(f.holdings?'full':''),
     holdings:expandHoldings(f.holdings), reportDate:f.reportDate||'',
-    limitClasses:f.limitClasses||null, limitTs:f.limitClasses?Date.now():0 }; });
+    limitClasses:(f.limitClasses||[]).map(function(c){ return Object.assign({},c,{unknown:true}); }), limitTs:0 }; });
 }
 function migrateFunds(list){
   var merged=false;
@@ -2048,7 +2102,7 @@ function migrateFunds(list){
       if(!f.scope&&d.scope){ f.scope=d.scope; merged=true; }
       if(d.src==='idx'&&f.src!=='idx'){ f.src='idx'; f.coef=d.coef||1; f.idxName=d.idxName||''; f.holdings=expandHoldings(d.holdings); f.reportDate=''; f.ah=idxAhOf(f); merged=true; }
       if(d.holdings&&d.src!=='idx'&&f.src!=='full'&&f.src!=='idx'){ f.holdings=expandHoldings(d.holdings); f.reportDate=d.reportDate; f.src='full'; merged=true; }
-      if(d.limitClasses&&!f.limitClasses){ f.limitClasses=d.limitClasses; f.limitTs=Date.now(); merged=true; }
+      if(d.limitClasses&&!f.limitClasses){ f.limitClasses=d.limitClasses.map(function(c){ return Object.assign({},c,{unknown:true}); }); f.limitTs=0; merged=true; }
       if(d.scopeDate&&!f.scopeDate){ f.scopeDate=d.scopeDate; merged=true; }
       /* 表格口径（共同限额基金列）为权威标准：覆盖旧解析结果 */
       if(d.scopeSrc==='table'&&(f.scopeSrc!=='table'||f.scope!==d.scope)){ f.scope=d.scope; f.scopeDate=d.scopeDate; f.scopeSrc='table'; merged=true; }
@@ -2083,6 +2137,14 @@ if(!funds||!funds.length){
   var mig=migrateFunds(funds);
   funds=mig.list;
   if(mig.merged) saveFunds();
+}
+/* 旧版把预置金额写成当日缓存；升级时清除一次，等待接口或公告核实。 */
+if(!lsGet('qd_limit_source_v2', false)){
+  funds.forEach(function(f){
+    f.limitTs=0; f.limitSource=''; f.limitDate=''; f.limitUrl='';
+    (f.limitClasses||[]).forEach(function(c){ c.unknown=true; });
+  });
+  saveFunds(); lsSet('qd_limit_source_v2', true);
 }
 usClose=lsGet(LS_USCLOSE, {});
 curSort=lsGet(LS_SORT,'default');
