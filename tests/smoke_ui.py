@@ -42,10 +42,14 @@ with sync_playwright() as playwright:
     page.locator('.card[data-code="100055"] .f-head').click()
     page.locator('.card[data-code="100055"] .cmp-index-line').wait_for(timeout=60000)
     assert page.locator('.card[data-code="100055"] .cmp-fund-line').count() == 1
-    chart_box = page.locator('.card[data-code="100055"] .detail-analysis').bounding_box()
-    holdings_box = page.locator('.card[data-code="100055"] .holdings-panel').bounding_box()
-    assert chart_box['x'] + chart_box['width'] < holdings_box['x']
-    assert abs(chart_box['y'] - holdings_box['y']) < 50
+    page.locator('.card[data-code="100055"] .holdings-panel').wait_for()
+    side_by_side = page.evaluate("""() => {
+      const card = document.querySelector('.card[data-code="100055"]');
+      const left = card.querySelector('.detail-analysis').getBoundingClientRect();
+      const right = card.querySelector('.holdings-panel').getBoundingClientRect();
+      return left.right < right.left && Math.abs(left.y - right.y) < 50;
+    }""")
+    assert side_by_side
     assert page.locator('.card[data-code="100055"] .holdings-scroll .hold tr').count() > 1
     page.locator('.card[data-code="100055"]').evaluate("el => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 90)")
     page.screenshot(path=str(ROOT / "mockups" / "implemented-fund-detail-desktop.png"))
@@ -79,9 +83,21 @@ with sync_playwright() as playwright:
     mobile_page.screenshot(path=str(ROOT / "mockups" / "implemented-mobile.png"))
     mobile_page.locator('.card[data-code="100055"] .f-head').click()
     mobile_page.locator('.card[data-code="100055"] .cmp-index-line').wait_for(timeout=60000)
-    mobile_chart = mobile_page.locator('.card[data-code="100055"] .detail-analysis').bounding_box()
-    mobile_holdings = mobile_page.locator('.card[data-code="100055"] .holdings-panel').bounding_box()
-    assert mobile_holdings['y'] >= mobile_chart['y'] + mobile_chart['height']
+    mobile_page.locator('.card[data-code="100055"] .holdings-panel').wait_for()
+    stacked = mobile_page.evaluate("""() => {
+      const card = document.querySelector('.card[data-code="100055"]');
+      const chart = card.querySelector('.hm-chart-block').getBoundingClientRect();
+      const holdings = card.querySelector('.holdings-panel').getBoundingClientRect();
+      const secondary = card.querySelector('.hm-secondary').getBoundingClientRect();
+      return holdings.y >= chart.bottom && secondary.y >= holdings.bottom;
+    }""")
+    assert stacked
+    visible_rows = mobile_page.locator('.card[data-code="100055"] .holdings-scroll tr:visible')
+    assert visible_rows.count() == 6
+    mobile_page.locator('.card[data-code="100055"]').evaluate("el => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 8)")
+    mobile_page.screenshot(path=str(ROOT / "mockups" / "implemented-fund-detail-mobile.png"))
+    mobile_page.locator('.card[data-code="100055"] .holdings-toggle').click()
+    assert visible_rows.count() > 6
     assert mobile_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     print("desktop and mobile: passed")
     browser.close()

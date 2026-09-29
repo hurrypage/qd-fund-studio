@@ -42,3 +42,23 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline-color:#66
   .holdings-panel{margin-top:0;border-top:0;border-left:1px solid var(--line);padding:17px 0 0 26px}
 }
 @media(max-width:700px){.holdings-scroll{max-height:none;overflow:visible}.holdings-panel{margin-top:24px}}
+.holdings-toggle{display:none}
+@media(max-width:700px){
+  .detail-grid{display:flex;flex-direction:column;gap:0;margin-top:12px}
+  .detail-analysis,.detail-analysis .hm-sec{display:contents}
+  .hm-chart-block{order:1;width:100%;min-width:0;border-top:1px solid var(--line);padding-top:14px}
+  .hm-chart-block>.hm-title{display:block;margin-bottom:6px}
+  .hm-chart-block .hm-tabs{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:18px;margin-top:11px;padding-bottom:6px;scrollbar-width:thin;scrollbar-color:#cbc8df transparent}
+  .hm-chart-block .hm-tabs::-webkit-scrollbar{height:3px}
+  .hm-chart-block .hm-tab{flex:none;white-space:nowrap;padding:4px 0}
+  .hm-chart-block .hm-nav-tip{margin:0 0 6px}
+  .hm-chart-block .cmp-note{margin-bottom:0}
+  .holdings-panel{order:2;width:100%;margin:14px 0 0;padding-top:14px}
+  .holdings-panel:not(.show-all) .holdings-scroll tr:nth-child(n+7){display:none}
+  .holdings-toggle{display:block;width:100%;border:0;border-top:1px solid var(--line);background:transparent;color:var(--accent);padding:11px 0;font-size:11px;text-align:center}
+  .hm-secondary{order:3;width:100%;margin-top:15px;border-top:1px solid var(--line);padding-top:14px}
+  .hm-secondary>.hm-title{margin-top:0!important}
+  .hm-perf{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+  .hm-perf .hp{padding:8px 2px}
+  .hp-l{font-size:9px}.hp-v{font-size:10px;margin-top:3px}
+}

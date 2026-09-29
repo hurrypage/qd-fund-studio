@@ -218,7 +218,7 @@ var ETF_LIST = [
 ];
 
 var LS_FUNDS='fe2_funds', LS_USCLOSE='fe2_usclose', LS_SORT='fe2_sort', LS_ORDER='fe2_order';
-var funds = [], quotes = {}, usClose = {}, expanded = {};
+var funds = [], quotes = {}, usClose = {}, expanded = {}, holdingsExpanded = {};
 var curView='home', curSort='default', timer=null;
 var LS_FILTER='fe2_filter';
 /* 基金分类：按持仓市场分布（texch: 7=美股 5=港股 1/2=A股），指数基金按跟踪指数归属 */
@@ -1544,7 +1544,7 @@ function renderHome(){
         +(la?'<span class="limit-change">限额变动：'+la.text+'</span>':'')
         +'<span class="f-del" onclick="event.stopPropagation();delFund(\''+f.code+'\',\''+fesc+'\')">删除基金</span></div>'
         +'<div class="detail-grid"><div class="detail-analysis">'+histModulesHtml(f)+'</div>'
-        +'<section class="holdings-panel" aria-label="基金持仓">'
+        +'<section class="holdings-panel'+(holdingsExpanded[f.code]?' show-all':'')+'" aria-label="基金持仓">'
         +'<div class="holdings-heading"><strong>'+(f.src==='idx'?'指数与代理标的':'基金持仓')+'</strong><span>'+r.detail.length+' 项 · '+(f.reportDate||'报告期未提供')+'</span></div>'
         +(r.detail.length?'<div class="holdings-scroll"><table class="hold"><tr><th>'+(f.src==='idx'?'指数/代理标的':'持仓')+'</th><th>'+(f.src==='idx'?'权重':'占净值')+'</th><th>实时</th><th>收盘</th></tr>'
         +r.detail.slice(0,20).map(function(d){
@@ -1555,6 +1555,7 @@ function renderHome(){
         }).join('')
         +(r.detail.length>20?'<tr><td colspan="4" class="s-code" style="text-align:left">…共 '+r.detail.length+' 只持仓，以上按占净值前 20 展示</td></tr>':'')
         +'</table></div>':'<div class="holdings-empty">暂无可展示的持仓数据</div>')
+        +(r.detail.length>5?'<button type="button" class="holdings-toggle" data-total="'+r.detail.length+'" data-shown="'+Math.min(r.detail.length,20)+'" onclick="toggleHoldings(\''+f.code+'\',this)">'+(holdingsExpanded[f.code]?'收起持仓':r.detail.length>20?'查看前 20 项持仓':'查看全部 '+r.detail.length+' 项持仓')+'</button>':'')
         +'</section></div>';
     }
     return html+'</div>';
@@ -1757,7 +1758,7 @@ function estCompareHtml(f, navAll){
   var avg=rows.length?sum/rows.length:null, avgAbs=rows.length?absSum/rows.length:null;
   var title='<div class="hm-title" style="margin-top:12px"><span>历史估值对比</span></div>';
   if(!rows.length){
-    return title+'<div class="hm-empty">积累几日估值记录后展示（每日刷新自动记录）</div>';
+    return '';
   }
   return title
     +'<div class="hm-stat">共 '+rows.length+' 条记录 · 平均偏差（估值−实际） <b class="'+cls(avg)+'">'+fmtPct(avg)+'</b> · 平均绝对偏差 '+fmtPct(avgAbs)+'</div>'
@@ -1785,12 +1786,13 @@ function histModulesHtml(f){
   var last=win[win.length-1];
   var lastCum=!isNaN(last.cum)?last.cum:last.nav;
   var lastPct=isNaN(last.pct)?null:last.pct;
-  var html='<div class="hm-sec">'
+  var html='<div class="hm-sec"><div class="hm-chart-block">'
     +'<div class="hm-title"><span>净值走势 · 同期沪深300对比</span>'+tabs+'</div>'
     +'<div class="hm-nav-tip">最新累计净值 <b>'+(isNaN(lastCum)?'--':lastCum.toFixed(4))+'</b>'
     +(lastPct!==null?' <span class="'+cls(lastPct)+'">'+fmtPct(lastPct)+'</span>':'')
     +'</div>'
-    +(benchmarkRows?comparisonChartSvg(win,benchmarkRows):'<div class="hm-empty">'+(benchmarkError?'沪深300数据暂不可用：'+benchmarkError:'正在加载同期沪深300数据…')+'</div>');
+    +(benchmarkRows?comparisonChartSvg(win,benchmarkRows):'<div class="hm-empty">'+(benchmarkError?'沪深300数据暂不可用：'+benchmarkError:'正在加载同期沪深300数据…')+'</div>')
+    +'</div><div class="hm-secondary">';
   /* ② 历史估值对比（含平均偏差统计） */
   html+=estCompareHtml(f, h.nav);
   /* ③ 基金历史表现（点击与累计净值走势图联动；今年为期间收益不联动） */
@@ -1802,7 +1804,14 @@ function histModulesHtml(f){
       var on=p[2]&&chartRange[f.code]===p[2]?' on':'';
       return '<div class="hp'+on+'"'+linked+'><div class="hp-l">'+p[1]+'</div><div class="hp-v '+cls(v)+'">'+fmtPct(v)+'</div></div>';
     }).join('')+'</div>';
-  return html+'</div>';
+  return html+'</div></div>';
+}
+function toggleHoldings(code, button){
+  holdingsExpanded[code]=!holdingsExpanded[code];
+  var panel=button.closest('.holdings-panel');
+  panel.classList.toggle('show-all',holdingsExpanded[code]);
+  var shown=+button.dataset.shown, total=+button.dataset.total;
+  button.textContent=holdingsExpanded[code]?'收起持仓':total>shown?'查看前 '+shown+' 项持仓':'查看全部 '+total+' 项持仓';
 }
 function setChartRange(code, r){
   chartRange[code]=r;
