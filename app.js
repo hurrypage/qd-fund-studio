@@ -1280,7 +1280,7 @@ function closeLimitModal(){
 
 /* 刷新缺失或过期的限购信息（24小时缓存），串行+间隔避免限流 */
 function refreshLimits() {
-  var queue = funds.filter(function(f){ return !f.limitTs || (Date.now()-f.limitTs) > 21600000; });
+  var queue = funds.filter(function(f){ return (!f.limitRetryAt || Date.now()>=f.limitRetryAt) && (!f.limitTs || (Date.now()-f.limitTs) > 21600000); });
   queue.sort(function(a,b){ return Number(!!b.fav)-Number(!!a.fav); });
   var changedLimits = [];
   var chain = Promise.resolve();
@@ -1301,6 +1301,7 @@ function refreshLimits() {
           f.limitClasses = classes;
           var hasApi=classes.some(function(c){ return !c.unknown; });
           f.limitTs = hasApi ? Date.now() : 0;
+          f.limitRetryAt = hasApi ? 0 : Date.now()+21600000;
           f.limitSource = hasApi ? 'api' : '';
           f.limitDate = hasApi ? new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Shanghai'}) : '';
           applyLimitNotice(f);
@@ -1312,6 +1313,7 @@ function refreshLimits() {
           f._limitSig = newSig;
           saveFunds();
           if (curView==='home') renderHome();
+          else if (curView==='mkt') renderMkt();
         }
         /* 公告口径实时解析（浏览器受Referer限制通常不可用，失败回退内置口径） */
         var limited = (classes||[]).some(function(c){ return (c.state||'').indexOf('暂停')>-1 || c.max>0; });
@@ -1327,7 +1329,7 @@ function refreshLimits() {
         }
         var d = FUNDS_DEFAULT.filter(function(x){ return x.code===f.code; })[0];
         if (d && d.scope && !f.scope) f.scope = d.scope;
-      }).catch(function(){});
+      }).catch(function(){ f.limitRetryAt=Date.now()+21600000; });
     }).then(function(){ return new Promise(function(r){ setTimeout(r, 400); }); });
   });
   return chain.then(function(){
@@ -1475,7 +1477,47 @@ function buyable(f){
 }
 /* ================= 场内ETF ================= */
 var etfInfo={}, etfInfoTs=0, etfInfoJob=null;
+var etfPriceHistory={}, etfPriceJobs={}, etfPriceError={}, etfExpanded={}, etfRange={};
 function etfQuoteCode(c){ return (c.charAt(0)==='5'?'sh':'sz')+c; }
+function loadEtfPriceHistory(code){
+  if(etfPriceHistory[code] && Date.now()-etfPriceHistory[code].ts<6*3600000) return Promise.resolve(etfPriceHistory[code].rows);
+  if(etfPriceJobs[code]) return etfPriceJobs[code];
+  var end=new Date(), start=new Date(end.getFullYear()-4,end.getMonth(),end.getDate());
+  var day=function(d){ return d.toISOString().slice(0,10); };
+  var symbol=etfQuoteCode(code);
+  var param=symbol+',day,'+day(start)+','+day(end)+',1200,qfq';
+  etfPriceJobs[code]=fetch('https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param='+encodeURIComponent(param),{mode:'cors',credentials:'omit'})
+    .then(function(r){ if(!r.ok) throw new Error('ETF 场内行情请求失败'); return r.json(); })
+    .then(function(d){
+      var info=d&&d.data&&d.data[symbol];
+      var raw=info&&(info.qfqday||info.day);
+      if(!Array.isArray(raw)) throw new Error('ETF 场内行情格式异常');
+      var rows=raw.map(function(x){ return {d:x[0],cum:+x[2]}; })
+        .filter(function(x){ return /^\d{4}-\d\d-\d\d$/.test(x.d)&&isFinite(x.cum)&&x.cum>0; });
+      if(rows.length<2) throw new Error('ETF 场内历史数据不足');
+      etfPriceHistory[code]={rows:rows,ts:Date.now()}; delete etfPriceJobs[code]; delete etfPriceError[code];
+      return rows;
+    }).catch(function(err){ delete etfPriceJobs[code]; etfPriceError[code]=err.message||'ETF 历史行情暂不可用'; throw err; });
+  return etfPriceJobs[code];
+}
+function toggleEtfChart(code){
+  etfExpanded[code]=!etfExpanded[code];
+  if(!etfExpanded[code]) { renderEtf(); return; }
+  renderEtf();
+  Promise.all([loadEtfPriceHistory(code),loadBenchmark()]).then(renderEtf).catch(renderEtf);
+}
+function setEtfRange(code,range){ etfRange[code]=range; renderEtf(); }
+function etfChartHtml(code){
+  var entry=etfPriceHistory[code];
+  if(!entry || !benchmarkRows) return '<div class="hm-empty">'+(etfPriceError[code]||benchmarkError||'正在加载 ETF 场内价格与沪深300历史行情…')+'</div>';
+  var range=etfRange[code]||'y1';
+  var selected=RANGES.filter(function(r){ return r[0]===range; })[0]||RANGES[4];
+  var tabs=RANGES.filter(function(r){return ['m1','m3','y1','y3'].indexOf(r[0])>=0;}).map(function(r){
+    return '<button type="button" class="etf-range'+(range===r[0]?' on':'')+'" aria-pressed="'+(range===r[0])+'" onclick="setEtfRange(\''+code+'\',\''+r[0]+'\')">'+r[1]+'</button>';
+  }).join('');
+  return '<div class="etf-chart-head"><strong>场内价格走势 · 同期沪深300</strong><div class="etf-ranges">'+tabs+'</div></div>'
+    +comparisonChartSvg(entry.rows.slice(-selected[2]),benchmarkRows,'ETF市价');
+}
 function fetchEtfInfo(code){
   return loadFundSeries(code,true).then(function(r){
     var last=r.nav[r.nav.length-1];
@@ -1507,15 +1549,15 @@ function renderEtf(){
     var ap=(a.q&&!isNaN(a.q.pct))?a.q.pct:-999, bp=(b.q&&!isNaN(b.q.pct))?b.q.pct:-999;
     return bp-ap;
   });
-  var html='<div class="etf-hd"><span class="e-name">基金</span><span class="e-num">市价 / 涨跌</span><span class="e-num">今年以来</span><span class="e-num">溢价率</span></div>';
+  var html='<div class="etf-hd"><span class="e-name">基金 / 走势</span><span class="e-num">市价 / 涨跌</span><span class="e-num">今年以来</span><span class="e-num">溢价率</span></div>';
   html+=rows.map(function(r){
     var q=r.q;
-    return '<div class="etf-row">'
-      +'<span class="e-name">'+r.e.name+'<i class="s-code">'+r.e.code+'</i></span>'
+    return '<div class="etf-item"><div class="etf-row">'
+      +'<span class="e-name">'+r.e.name+'<i class="s-code">'+r.e.code+' <button type="button" class="etf-chart-toggle" aria-expanded="'+!!etfExpanded[r.e.code]+'" onclick="toggleEtfChart(\''+r.e.code+'\')">'+(etfExpanded[r.e.code]?'收起走势':'走势对比 ↗')+'</button></i></span>'
       +'<span class="e-num"><b>'+(q?q.price.toFixed(3):'--')+'</b><i class="'+cls(q?q.pct:null)+'">'+fmtPct(q?q.pct:null)+'</i></span>'
       +'<span class="e-num"><i class="'+cls(r.ytd)+'">'+fmtPct(r.ytd)+'</i></span>'
       +'<span class="e-num"><i class="'+premCls(r.prem)+'">'+fmtPct(r.prem)+'</i></span>'
-      +'</div>';
+      +'</div>'+(etfExpanded[r.e.code]?'<div class="etf-chart-panel">'+etfChartHtml(r.e.code)+'</div>':'')+'</div>';
   }).join('');
   document.getElementById('etf').innerHTML=html;
 }
@@ -1624,6 +1666,47 @@ function renderMkt(){
       +'<span><div class="mkt-price">'+(q?q.price.toFixed(2):'--')+'</div>'
       +'<div class="mkt-pct '+cls(q?q.pct:null)+'">'+fmtPct(q?q.pct:null)+'</div></span></div>';
   }).join('');
+  renderQuotaList();
+}
+
+var quotaShowAll=false;
+function toggleQuotaMore(){ quotaShowAll=!quotaShowAll; renderQuotaList(); }
+function renderQuotaList(){
+  var escapeText=function(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(ch){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]; }); };
+  var rows=funds.map(function(f){
+    if(f.limitNoticePending) return null;
+    var classes=(f.limitClasses||[]).filter(function(c){return !c.unknown && c.max>0 && !/暂停|封闭|认购/.test(c.state||'');});
+    if(!classes.length) return null;
+    var amounts=classes.map(function(c){return c.max;});
+    var same=amounts.every(function(v){return v===amounts[0];});
+    var label=same ? classes.map(function(c){return c.cls;}).join('/')+' '+fmtAmt(amounts[0])
+      : classes.map(function(c){return c.cls+' '+fmtAmt(c.max);}).join(' · ');
+    var source=f.limitSource==='notice'?'公告核实':'接口核对';
+    return {f:f,min:Math.min.apply(null,amounts),label:label,source:source};
+  }).filter(Boolean).sort(function(a,b){return a.min-b.min || a.f.code.localeCompare(b.f.code);});
+  var pending=funds.filter(function(f){return f.limitNoticePending;});
+  var count=document.getElementById('quotaCount'), list=document.getElementById('quotaList'), more=document.getElementById('quotaMore');
+  if(!count||!list||!more) return;
+  count.textContent=rows.length+' 只已核实'+(pending.length?' · '+pending.length+' 只待核验':'');
+  if(!rows.length&&!pending.length){ list.innerHTML='<div class="quota-empty">正在核对基金申购限额，暂无可确认的金额。</div>'; more.style.display='none'; return; }
+  var combined=rows.map(function(r){return {kind:'verified',row:r};}).concat(pending.map(function(f){return {kind:'pending',fund:f};}));
+  list.innerHTML=(quotaShowAll?combined:combined.slice(0,14)).map(function(item){
+    if(item.kind==='pending'){
+      var p=item.fund;
+      var link=/^https:\/\/pdf\.dfcfw\.com\//.test(p.limitUrl||'')
+        ? '<a href="'+escapeText(p.limitUrl)+'" target="_blank" rel="noopener noreferrer">待核验公告 · '+escapeText(p.limitDate||'')+'</a>' : '最新公告待核验';
+      return '<div class="quota-row pending"><div class="quota-fund"><strong>'+escapeText(p.name)+'</strong><small>'+escapeText(p.code)+'</small></div><strong class="quota-amount">金额待核验</strong><div class="quota-source">'+link+'</div></div>';
+    }
+    var r=item.row;
+    var f=r.f;
+    var source=f.limitSource==='notice'&&/^https:\/\/pdf\.dfcfw\.com\//.test(f.limitUrl||'')
+      ? '<a href="'+escapeText(f.limitUrl)+'" target="_blank" rel="noopener noreferrer">公告核实 · '+escapeText(f.limitDate||'')+'</a>'
+      : '<span>'+r.source+' · '+escapeText(f.limitDate||'')+'</span>';
+    return '<div class="quota-row"><div class="quota-fund"><strong>'+escapeText(f.name)+'</strong><small>'+escapeText(f.code)+' · '+(f.scope==='各份额合并计算'?'合并计算':f.scope==='各份额分开计算'?'各份额分开计算':'计算口径待核验')+'</small></div>'
+      +'<strong class="quota-amount">'+escapeText(r.label)+'</strong><div class="quota-source">'+source+'</div></div>';
+  }).join('');
+  more.style.display=combined.length>14?'block':'none';
+  more.textContent=quotaShowAll?'收起列表':'查看全部 '+combined.length+' 只基金';
 }
 
 function renderMine(){
@@ -1765,7 +1848,8 @@ function comparableSeries(nav, indexRows){
   });
   return out;
 }
-function comparisonChartSvg(nav, indexRows){
+function comparisonChartSvg(nav, indexRows, fundLabel){
+  fundLabel=fundLabel||'本基金';
   var points=comparableSeries(nav,indexRows);
   if(points.length<2) return '<div class="hm-empty">两组数据没有足够的共同日期，暂无法比较</div>';
   var W=640,H=220,PL=40,PR=18,PT=16,PB=29;
@@ -1784,15 +1868,15 @@ function comparisonChartSvg(nav, indexRows){
       +'<text class="cmp-axis" x="'+(PL-7)+'" y="'+(+yy+4)+'" text-anchor="end">'+(val>0?'+':'')+val.toFixed(0)+'%</text>';
   }).join('');
   return '<div class="comparison-chart">'
-    +'<div class="cmp-legend"><span><i class="cmp-fund"></i>本基金 <b>'+fmtPct(last.fund)+'</b></span><span><i class="cmp-index"></i>沪深300 <b>'+fmtPct(last.index)+'</b></span></div>'
-    +'<svg class="hm-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="本基金与同期沪深300的收益率走势对比">'
+    +'<div class="cmp-legend"><span><i class="cmp-fund"></i>'+fundLabel+' <b>'+fmtPct(last.fund)+'</b></span><span><i class="cmp-index"></i>沪深300 <b>'+fmtPct(last.index)+'</b></span></div>'
+    +'<svg class="hm-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+fundLabel+'与同期沪深300的收益率走势对比">'
     +grid+'<line class="cmp-zero" x1="'+PL+'" y1="'+y(0).toFixed(1)+'" x2="'+(W-PR)+'" y2="'+y(0).toFixed(1)+'"/>'
     +'<path class="cmp-index-line" d="'+line('index')+'"/><path class="cmp-fund-line" d="'+line('fund')+'"/>'
     +'<circle class="cmp-index-end" cx="'+x(last).toFixed(1)+'" cy="'+y(last.index).toFixed(1)+'" r="3"/>'
     +'<circle class="cmp-fund-end" cx="'+x(last).toFixed(1)+'" cy="'+y(last.fund).toFixed(1)+'" r="3"/>'
     +'<text class="cmp-axis" x="'+PL+'" y="'+(H-6)+'">'+points[0].d+'</text>'
     +'<text class="cmp-axis" x="'+(W-PR)+'" y="'+(H-6)+'" text-anchor="end">'+last.d+'</text></svg>'
-    +'<div class="cmp-note">同一起点归一为 0% · 按基金净值日期对齐沪深300最近收盘价</div></div>';
+    +'<div class="cmp-note">同一起点归一为 0% · 按'+(fundLabel==='ETF市价'?'ETF 交易日期':'基金净值日期')+'对齐沪深300最近收盘价</div></div>';
 }
 /* 历史估值对比表：估值快照 × 实际净值涨跌 */
 function estCompareHtml(f, navAll){

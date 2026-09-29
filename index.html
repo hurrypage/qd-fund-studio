@@ -15,9 +15,9 @@
       <div class="brand"><span class="brand-mark">QD</span><span class="brand-name">QD 观察台<small>跨境基金工作台</small></span></div>
       <div class="nav-caption">工作空间</div>
       <button class="ni on" data-v="home" title="基金总览" onclick="setView('home')"><span class="nav-symbol">▦</span><span>基金总览</span></button>
-      <button class="ni" data-v="etf" title="场内 ETF" onclick="setView('etf')"><span class="nav-symbol">▤</span><span>场内 ETF</span></button>
+      <button class="ni" data-v="etf" title="跨境 ETF" onclick="setView('etf')"><span class="nav-symbol">▤</span><span>跨境ETF</span></button>
       <button class="ni" data-v="mkt" title="全球行情" onclick="setView('mkt')"><span class="nav-symbol">◎</span><span>全球行情</span></button>
-      <button class="ni" data-v="mine" title="关于与设置" onclick="setView('mine')"><span class="nav-symbol">⚙</span><span>关于与设置</span></button>
+      <button class="ni" data-v="mine" title="关于与设置" onclick="setView('mine')"><span class="nav-symbol">⚙</span><span>设置</span></button>
       <div class="side-note"><span class="side-note-label">数据说明</span><p>估值由公开持仓与市场行情计算，仅供观察，不构成投资建议。</p></div>
     </nav>
 
@@ -73,8 +73,8 @@
           <details class="method-note"><summary>估值与数据口径</summary><div class="tips">收盘估值结合昨夜美股收盘与今日 A 股、港股行情；实时估值合并美股盘前、盘中及盘后最新行情。基金持仓按公开报告披露，可能滞后于实际调仓。限购信息来自天天基金公开资料及申购公告，购买前请以基金公司公告为准。估值仅供参考，不构成投资建议。</div></details>
         </div>
 
-        <div id="view-etf" style="display:none"><div class="section-heading"><div><span class="section-kicker">场内交易</span><h2>跨境 ETF</h2></div><span class="section-aside">按场内涨跌幅排序</span></div><div class="data-panel" id="etf"></div><p class="table-note">溢价率 =（场内市价 − 基金净值）/ 净值；净值以最近披露日为准。高溢价可能带来回落风险。</p></div>
-        <div id="view-mkt" style="display:none"><div class="section-heading"><div><span class="section-kicker">全球视野</span><h2>市场行情</h2></div><span class="section-aside">A 股、港股、美股及主要海外指数</span></div><div class="data-panel market-panel" id="mkt"></div></div>
+        <div id="view-etf" style="display:none"><div class="section-heading"><div><span class="section-kicker">场内交易</span><h2>跨境 ETF</h2></div><span class="section-aside">按场内涨跌幅排序 · 点击行内走势对比</span></div><div class="data-panel" id="etf"></div><p class="table-note">走势图比较 ETF 场内收盘价与沪深 300 的同期收益率。溢价率 =（场内市价 − 基金净值）/ 净值；净值以最近披露日为准。</p></div>
+        <div id="view-mkt" style="display:none"><div class="section-heading"><div><span class="section-kicker">全球视野</span><h2>市场行情</h2></div><button type="button" class="section-jump" onclick="document.getElementById('quotaSection').scrollIntoView({behavior:'smooth',block:'start'})">查看 QDII 限额 ↓</button></div><div class="data-panel market-panel" id="mkt"></div><section class="quota-section" id="quotaSection" aria-label="QDII 申购限额"><div class="section-heading"><div><span class="section-kicker">申购额度</span><h2>QDII 限购速览 <span class="heading-count" id="quotaCount"></span></h2></div><span class="section-aside">单日申购上限 · 按金额从低到高</span></div><p class="quota-note">显示最近核对的申购上限，不代表实时剩余额度；待核验的公告金额不计入。</p><div id="quotaList" class="quota-list"></div><button type="button" id="quotaMore" class="quota-more" onclick="toggleQuotaMore()" style="display:none"></button></section></div>
         <div id="view-mine" style="display:none"><div class="section-heading"><div><span class="section-kicker">使用说明</span><h2>关于观察台</h2></div></div><div class="data-panel mine-card" id="mineCard"></div></div>
 
         <footer class="footer">公开市场数据可能延迟。所有估值仅供参考，不构成投资建议。</footer>

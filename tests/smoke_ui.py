@@ -17,6 +17,7 @@ with sync_playwright() as playwright:
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(URL, wait_until="domcontentloaded")
+    assert page.locator('nav .ni[data-v="etf"] span').last.is_visible()
     page.wait_for_function("document.querySelector('.card[data-code=\"019736\"] .f-sub')?.textContent.includes('A限购10元')", timeout=60000)
     assert "C限购10元" in page.locator('.card[data-code="019736"] .f-sub').inner_text()
     assert "公告 2026-09-24" in page.locator('.card[data-code="019736"] .f-sub').inner_text()
@@ -64,6 +65,14 @@ with sync_playwright() as playwright:
     assert page.locator('.card[data-code="100055"] .cmp-index-line').count() == 1
     page.locator('button[data-v="etf"]').click()
     page.locator('#view-etf .etf-row').first.wait_for(timeout=60000)
+    page.locator('.etf-item').filter(has=page.locator('.s-code', has_text='159529')).locator('.etf-chart-toggle').click()
+    page.locator('.etf-item').filter(has=page.locator('.s-code', has_text='159529')).locator('.cmp-index-line').wait_for(timeout=60000)
+    page.locator('.etf-item').filter(has=page.locator('.s-code', has_text='159529')).locator('.cmp-fund-line').wait_for()
+    page.locator('button[data-v="mkt"]').click()
+    assert '019736' in page.locator('#quotaList').inner_text()
+    assert '10元' in page.locator('#quotaList').inner_text()
+    assert '019441' in page.locator('#quotaList').inner_text()
+    assert '待核验' in page.locator('#quotaList').inner_text()
     page.locator('button[data-v="home"]').click()
     page.locator('#focusChart .cmp-index-line').wait_for(timeout=60000)
     search = page.locator('#kw')
@@ -104,6 +113,9 @@ with sync_playwright() as playwright:
     mobile_page.screenshot(path=str(ROOT / "mockups" / "implemented-fund-detail-mobile.png"))
     mobile_page.locator('.card[data-code="100055"] .holdings-toggle').click()
     assert visible_rows.count() > 6
+    mobile_page.locator('button[data-v="mkt"]').click()
+    mobile_page.locator('.section-jump').click()
+    assert mobile_page.locator('#quotaSection').is_visible()
     assert mobile_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     print("desktop and mobile: passed")
     browser.close()
