@@ -23,3 +23,22 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline-color:#66
 .market-overview{border-top:1px solid #25252a;padding-top:19px;margin:38px 0 30px}.idx-strip{gap:0;border-bottom:1px solid var(--line)}.idx{background:transparent;border:0;border-right:1px solid var(--line);border-radius:0;min-height:85px;padding:14px 20px 17px 0;box-shadow:none}.idx:last-child{border-right:0}.idx:hover{box-shadow:none;transform:none}.idx-pct{font-size:20px}.data-panel{border-radius:0;box-shadow:none}.etf-hd,.mkt-row{background:transparent}.mine-card{background:transparent}.btn{border-radius:0}.footer{font-size:10px}
 @media(max-width:1050px){.overview-grid{grid-template-columns:minmax(0,1.3fr) minmax(250px,.8fr);gap:25px}.watch-panel{padding-left:24px}.content-wrap{padding-left:28px;padding-right:28px}.topbar{padding-left:28px;padding-right:28px}.controls{display:block}.filter-row{margin-bottom:12px}.control-bottom{max-width:480px}}
 @media(max-width:700px){.app-shell{display:block}.side-nav{background:#fff;border-top:1px solid var(--line);border-right:0;padding:5px 8px;gap:0}.brand,.nav-caption,.side-note{display:none}.ni{height:48px;width:auto;min-width:62px;border-radius:0;gap:2px}.ni span:last-child{display:inline;font-size:10px}.nav-symbol{font-size:19px}.topbar{height:50px;padding:0 17px}.top-status .upd,.status-divider{display:none}.content-wrap{padding:0 17px 80px}.page-intro{padding:20px 0 25px}.page-intro h1{font-size:26px}.overview-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary-metric{padding:16px 8px 16px 0;margin-right:8px}.summary-metric:nth-child(2){border:0;margin:0}.summary-metric:nth-child(n+3){border-top:1px solid var(--line)}.summary-metric strong{font-size:27px}.overview-grid{display:block;margin:28px 0}.focus-head h2{font-size:15px}.focus-performance strong{font-size:22px}.focus-chart{min-height:210px}.watch-panel{border-left:0;border-top:1px solid var(--line);padding:20px 0 0;margin-top:20px}.watch-row{padding:12px 0}.controls{display:block}.filter-row{flex-wrap:nowrap;margin:0 -17px 11px;padding:0 17px 3px}.control-bottom{max-width:none}.funds-heading{padding-top:15px}.card{padding:14px 0}.f-head{align-items:flex-start}.f-left{gap:5px}.f-right{min-width:86px;padding-right:0}.est-big{font-size:15px}.f-estnav{display:none}.f-x{display:none}.market-overview{margin-top:28px}.idx{padding:12px 6px 12px 0;min-height:70px}.idx-pct{font-size:16px}.cmp-legend{gap:10px;font-size:10px}.cmp-legend b{font-size:10px}}
+
+/* Expanded fund: keep the comparison and holdings visible together on desktop. */
+.detail-grid{display:block;margin-top:18px}
+.detail-analysis{min-width:0}.detail-analysis .hm-sec{margin-top:0}
+.detail-analysis .comparison-chart{max-width:960px}
+.holdings-panel{min-width:0;margin-top:22px;border-top:1px solid var(--line);padding-top:17px}
+.holdings-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.holdings-heading strong{font-size:12px}.holdings-heading span{color:var(--soft);font-size:10px;text-align:right}
+.holdings-scroll{max-height:510px;overflow:auto;scrollbar-width:thin}
+.holdings-scroll .hold{margin:0;table-layout:fixed}
+.holdings-scroll .hold th:first-child{width:40%}
+.holdings-scroll .hold th{position:sticky;top:0;background:var(--bg);z-index:1}
+.holdings-scroll .hold td{overflow-wrap:anywhere}
+.holdings-empty{padding:30px 8px;color:var(--soft);font-size:11px;text-align:center}
+@media(min-width:1200px){
+  .detail-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(340px,.9fr);gap:30px;align-items:start}
+  .holdings-panel{margin-top:0;border-top:0;border-left:1px solid var(--line);padding:17px 0 0 26px}
+}
+@media(max-width:700px){.holdings-scroll{max-height:none;overflow:visible}.holdings-panel{margin-top:24px}}

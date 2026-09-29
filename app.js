@@ -1543,8 +1543,10 @@ function renderHome(){
         +'<span>系数 '+(f.coef||0.90)+'</span>'
         +(la?'<span class="limit-change">限额变动：'+la.text+'</span>':'')
         +'<span class="f-del" onclick="event.stopPropagation();delFund(\''+f.code+'\',\''+fesc+'\')">删除基金</span></div>'
-        +histModulesHtml(f)
-        +'<table class="hold"><tr><th>'+(f.src==='idx'?'指数/代理标的':'持仓')+'</th><th>'+(f.src==='idx'?'权重':'占净值')+'</th><th>实时</th><th>收盘</th></tr>'
+        +'<div class="detail-grid"><div class="detail-analysis">'+histModulesHtml(f)+'</div>'
+        +'<section class="holdings-panel" aria-label="基金持仓">'
+        +'<div class="holdings-heading"><strong>'+(f.src==='idx'?'指数与代理标的':'基金持仓')+'</strong><span>'+r.detail.length+' 项 · '+(f.reportDate||'报告期未提供')+'</span></div>'
+        +(r.detail.length?'<div class="holdings-scroll"><table class="hold"><tr><th>'+(f.src==='idx'?'指数/代理标的':'持仓')+'</th><th>'+(f.src==='idx'?'权重':'占净值')+'</th><th>实时</th><th>收盘</th></tr>'
         +r.detail.slice(0,20).map(function(d){
           return '<tr><td>'+d.name+' <span class="s-code">'+d.code+'</span>'+(d.qc?'':' <span class="s-code">无行情</span>')+'</td>'
             +'<td>'+(f.src==='idx'&&d.weight>=100?'--':d.weight.toFixed(2)+'%')+'</td>'
@@ -1552,7 +1554,8 @@ function renderHome(){
             +'<td class="'+cls(d.close)+'">'+fmtPct(d.close)+'</td></tr>';
         }).join('')
         +(r.detail.length>20?'<tr><td colspan="4" class="s-code" style="text-align:left">…共 '+r.detail.length+' 只持仓，以上按占净值前 20 展示</td></tr>':'')
-        +'</table>';
+        +'</table></div>':'<div class="holdings-empty">暂无可展示的持仓数据</div>')
+        +'</section></div>';
     }
     return html+'</div>';
   }).join('');

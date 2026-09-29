@@ -42,6 +42,13 @@ with sync_playwright() as playwright:
     page.locator('.card[data-code="100055"] .f-head').click()
     page.locator('.card[data-code="100055"] .cmp-index-line').wait_for(timeout=60000)
     assert page.locator('.card[data-code="100055"] .cmp-fund-line').count() == 1
+    chart_box = page.locator('.card[data-code="100055"] .detail-analysis').bounding_box()
+    holdings_box = page.locator('.card[data-code="100055"] .holdings-panel').bounding_box()
+    assert chart_box['x'] + chart_box['width'] < holdings_box['x']
+    assert abs(chart_box['y'] - holdings_box['y']) < 50
+    assert page.locator('.card[data-code="100055"] .holdings-scroll .hold tr').count() > 1
+    page.locator('.card[data-code="100055"]').evaluate("el => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 90)")
+    page.screenshot(path=str(ROOT / "mockups" / "implemented-fund-detail-desktop.png"))
     page.locator('.card[data-code="100055"] .hm-tab').last.click()
     assert page.locator('.card[data-code="100055"] .hm-tab.on').inner_text() == "全部"
     assert page.locator('.card[data-code="100055"] .cmp-index-line').count() == 1
@@ -70,5 +77,11 @@ with sync_playwright() as playwright:
     mobile_page.locator("#focusChart .cmp-index-line").wait_for(timeout=60000)
     assert mobile_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     mobile_page.screenshot(path=str(ROOT / "mockups" / "implemented-mobile.png"))
+    mobile_page.locator('.card[data-code="100055"] .f-head').click()
+    mobile_page.locator('.card[data-code="100055"] .cmp-index-line').wait_for(timeout=60000)
+    mobile_chart = mobile_page.locator('.card[data-code="100055"] .detail-analysis').bounding_box()
+    mobile_holdings = mobile_page.locator('.card[data-code="100055"] .holdings-panel').bounding_box()
+    assert mobile_holdings['y'] >= mobile_chart['y'] + mobile_chart['height']
+    assert mobile_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     print("desktop and mobile: passed")
     browser.close()
